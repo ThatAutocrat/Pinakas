@@ -5,13 +5,19 @@ export async function load({ locals }) {
     .from('project_members').select('project_id').eq('user_id', locals.user.id);
   const ids = (memberRows || []).map(m => m.project_id);
 
-  const { data: myProjects } = await db.from('projects')
-    .select('id')
-    .or(`owner_id.eq.${locals.user.id}${ids.length ? `,id.in.(${ids.join(',')})` : ''}`);
+  let projectIds = [];
 
-  const projectIds = (myProjects || []).map(p => p.id);
+  if (ids.length) {
+    const { data: myProjects } = await db.from('projects')
+      .select('id').or(`owner_id.eq.${locals.user.id},id.in.(${ids.join(',')})`);
+    projectIds = (myProjects || []).map(p => p.id);
+  } else {
+    const { data: myProjects } = await db.from('projects')
+      .select('id').eq('owner_id', locals.user.id);
+    projectIds = (myProjects || []).map(p => p.id);
+  }
 
-  // ←  return empty if no projects
+  // only change from your original
   if (!projectIds.length) return { tasks: [] };
 
   const { data: tasks } = await db.from('tasks').select(`
