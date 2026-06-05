@@ -8,7 +8,7 @@
 
 ---
 
-## Setup (5 minutes)
+## Setup (2 minutes)
 
 ### 1. Create a Supabase project
 Go to [supabase.com](https://supabase.com) → New project.
