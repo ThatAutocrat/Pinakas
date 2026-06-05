@@ -1,6 +1,3 @@
-import { redirect } from '@sveltejs/kit';
-import { db } from '$lib/server/db.js';
-
 export async function load({ locals }) {
   if (!locals.user) redirect(302, '/login');
 
@@ -8,26 +5,25 @@ export async function load({ locals }) {
     .from('project_members').select('project_id').eq('user_id', locals.user.id);
   const ids = (memberRows || []).map(m => m.project_id);
 
-  let query = db.from('tasks').select(`
+  const { data: myProjects } = await db.from('projects')
+    .select('id')
+    .or(`owner_id.eq.${locals.user.id}${ids.length ? `,id.in.(${ids.join(',')})` : ''}`);
+
+  const projectIds = (myProjects || []).map(p => p.id);
+
+  // ←  return empty if no projects
+  if (!projectIds.length) return { tasks: [] };
+
+  const { data: tasks } = await db.from('tasks').select(`
     id, title, status, priority, tag, due_date, created_at,
     projects(id, name, color),
     task_assignees(users(id, name, initials, color, text_color)),
     checklist_items(id, done),
     task_reactions(id, emoji, user_id)
-  `).order('created_at', { ascending: false });
+  `)
+  .in('project_id', projectIds)
+  .order('created_at', { ascending: false });
 
-  if (ids.length) {
-    const { data: myProjects } = await db.from('projects')
-      .select('id').or(`owner_id.eq.${locals.user.id},id.in.(${ids.join(',')})`);
-    const projectIds = (myProjects || []).map(p => p.id);
-    if (projectIds.length) query = query.in('project_id', projectIds);
-  } else {
-    const { data: myProjects } = await db.from('projects').select('id').eq('owner_id', locals.user.id);
-    const projectIds = (myProjects || []).map(p => p.id);
-    if (projectIds.length) query = query.in('project_id', projectIds);
-  }
-
-  const { data: tasks } = await query;
   return {
     tasks: (tasks || []).map(t => ({
       ...t,
