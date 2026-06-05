@@ -1,3 +1,7 @@
+import { redirect } from '@sveltejs/kit';
+import { db } from '$lib/server/db.js';
+
+
 export async function load({ locals }) {
   if (!locals.user) redirect(302, '/login');
 
