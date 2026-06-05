@@ -1,0 +1,456 @@
+<script>
+  let { data } = $props();
+  let { user, projects, users } = data;
+
+  let activeProject = $state(projects[0] ?? null);
+  let selectedTask = $state(null);
+  let showAddTask = $state(false);
+  let newTaskTitle = $state('');
+  let newTaskStatus = $state('Backlog');
+  let showReactionPicker = $state(null);
+
+  const cols = ['Backlog', 'To do', 'In progress', 'Done'];
+
+  // Local tasks for optimistic updates
+  let localTasks = $state(activeProject?.tasks ?? []);
+  $effect(() => { localTasks = activeProject?.tasks ?? []; });
+
+  const totalTasks    = $derived(localTasks.length);
+  const doneTasks     = $derived(localTasks.filter(t => t.status === 'Done').length);
+  const inProgressT   = $derived(localTasks.filter(t => t.status === 'In progress').length);
+  const donePct       = $derived(totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0);
+
+  function tasksForCol(col) { return localTasks.filter(t => t.status === col); }
+
+  const tagColors = {
+    Design:    {bg:'#E6F1FB',c:'#0C447C'}, Backend:   {bg:'#F1EFE8',c:'#444441'},
+    Feature:   {bg:'#FAEEDA',c:'#633806'}, Bug:       {bg:'#FCEBEB',c:'#791F1F'},
+    Research:  {bg:'#FAEEDA',c:'#633806'}, Marketing: {bg:'#EAF3DE',c:'#27500A'},
+    Planning:  {bg:'#EEEDFE',c:'#3C3489'}, Done:      {bg:'#EAF3DE',c:'#27500A'}
+  };
+  const priorityColors = {
+    Critical:{bg:'#FCEBEB',c:'#791F1F'}, High:{bg:'#FAEEDA',c:'#633806'},
+    Medium:  {bg:'#E6F1FB',c:'#0C447C'}, Low: {bg:'#EAF3DE',c:'#27500A'}
+  };
+  const ANIME_REACTIONS = [
+    {emoji:'🔥',label:'Sugoi!'}, {emoji:'😤',label:'Yosh!'}, {emoji:'😭',label:'Nani?!'},
+    {emoji:'✨',label:'Kawaii'}, {emoji:'😅',label:'Yamete'},{emoji:'💪',label:'Ganbare!'},
+    {emoji:'🎉',label:'Yatta!'}, {emoji:'😴',label:'Zzz...'},{emoji:'🤯',label:'Uso da!'},
+    {emoji:'🌸',label:'Nakama'}
+  ];
+
+  function tagStyle(tag) {
+    const t = tagColors[tag] ?? {bg:'#F1EFE8',c:'#444441'};
+    return `background:${t.bg};color:${t.c}`;
+  }
+  function getReactionCounts(reactions) {
+    const counts = {};
+    for (const r of (reactions||[])) counts[r.emoji] = (counts[r.emoji]||0)+1;
+    return Object.entries(counts).map(([emoji,count]) => ({emoji,count}));
+  }
+  function hasUserReacted(reactions, emoji) {
+    return (reactions||[]).some(r => r.emoji === emoji && r.user_id === user.id);
+  }
+
+  // ── Optimistic add task ──────────────────────────────────────
+  async function addTask() {
+    if (!newTaskTitle.trim() || !activeProject) return;
+    const temp = {
+      id: 'temp-'+Date.now(), title: newTaskTitle, status: newTaskStatus,
+      tag:'Feature', priority:'Medium', due_date:null,
+      assignees:[], checklist:[], comments:[], reactions:[]
+    };
+    localTasks = [...localTasks, temp];
+    const title = newTaskTitle;
+    const status = newTaskStatus;
+    newTaskTitle = '';
+    showAddTask = false;
+
+    const res = await fetch('/api/tasks', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({title, status, projectId: activeProject.id})
+    });
+    const real = await res.json();
+    localTasks = localTasks.map(t => t.id === temp.id ? {...real, assignees:[], checklist:[], comments:[], reactions:[]} : t);
+  }
+
+  // ── Optimistic move ──────────────────────────────────────────
+  async function moveTask(taskId, newStatus) {
+    localTasks = localTasks.map(t => t.id === taskId ? {...t, status: newStatus} : t);
+    if (selectedTask?.id === taskId) selectedTask = {...selectedTask, status: newStatus};
+    await fetch(`/api/tasks/${taskId}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({status: newStatus})
+    });
+  }
+
+  // ── Optimistic reactions ─────────────────────────────────────
+  async function toggleReaction(taskId, emoji) {
+    showReactionPicker = null;
+    const res = await fetch(`/api/tasks/${taskId}/reactions`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({emoji})
+    });
+    const updated = await res.json();
+    localTasks = localTasks.map(t => t.id === taskId ? {...t, reactions: updated} : t);
+    if (selectedTask?.id === taskId) selectedTask = {...selectedTask, reactions: updated};
+  }
+
+  // ── Checklist ────────────────────────────────────────────────
+  async function toggleChecklist(itemId, done, taskId) {
+    await fetch(`/api/tasks/${taskId}/checklist/${itemId}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({done})
+    });
+    localTasks = localTasks.map(t => t.id !== taskId ? t : {
+      ...t, checklist: t.checklist.map(i => i.id === itemId ? {...i, done} : i)
+    });
+    if (selectedTask?.id === taskId) {
+      selectedTask = {...selectedTask, checklist: selectedTask.checklist.map(i => i.id === itemId ? {...i,done} : i)};
+    }
+  }
+
+  // ── Delete ───────────────────────────────────────────────────
+  async function deleteTask(taskId) {
+    localTasks = localTasks.filter(t => t.id !== taskId);
+    if (selectedTask?.id === taskId) selectedTask = null;
+    await fetch(`/api/tasks/${taskId}`, {method:'DELETE'});
+  }
+
+  function switchProject(p) { activeProject = p; selectedTask = null; localTasks = p.tasks ?? []; }
+</script>
+
+<svelte:head><title>Pinakas — {activeProject?.name ?? 'Dashboard'}</title></svelte:head>
+<svelte:window onclick={(e) => { if (!e.target.closest('.rzone')) showReactionPicker = null; }} />
+
+<div class="shell">
+  <!-- Project sidebar -->
+  <div class="proj-list">
+    <div class="pl-label">Projects</div>
+    {#if projects.length === 0}
+      <div class="pl-empty">
+        <p>No projects yet.</p>
+        <a href="/dashboard/projects/new" class="btn btn-primary" style="font-size:12px;padding:5px 12px">
+          <i class="ti ti-plus"></i> Create one
+        </a>
+      </div>
+    {/if}
+    {#each projects as p}
+      <button class="proj-item" class:active={activeProject?.id === p.id} onclick={() => switchProject(p)}>
+        <span class="dot" style="background:{p.color}"></span>
+        <span class="proj-name">{p.name}</span>
+        <span class="proj-count">{p.tasks?.length ?? 0}</span>
+      </button>
+    {/each}
+    <a href="/dashboard/projects/new" class="proj-item muted">
+      <i class="ti ti-plus"></i> New project
+    </a>
+    <div class="pl-label" style="margin-top:1rem">Team</div>
+    {#each users.slice(0,6) as u}
+      <div class="team-member">
+        <div class="avatar" style="background:{u.color};color:{u.text_color}">{u.initials}</div>
+        <span>{u.name}</span>
+      </div>
+    {/each}
+  </div>
+
+  <!-- Board area -->
+  <div class="board-area">
+    {#if !activeProject}
+      <div class="no-proj">Select a project to view its board</div>
+    {:else}
+      <div class="topbar">
+        <div class="tl">
+          <span class="proj-title">{activeProject.name}</span>
+          <span class="badge badge-green">{activeProject.status ?? 'On track'}</span>
+          {#if activeProject.due_date}<span class="due-chip">Due {activeProject.due_date}</span>{/if}
+        </div>
+        <div class="tr">
+          <div class="user-chip">
+            <div class="avatar" style="background:{user.color};color:{user.textColor}">{user.initials}</div>
+            {user.name}
+          </div>
+          {#if projects.length > 0}
+            <button class="btn btn-primary" onclick={() => showAddTask = true}>
+              <i class="ti ti-plus"></i> Add task
+            </button>
+          {/if}
+        </div>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat"><div class="stat-l">Total</div><div class="stat-n">{totalTasks}</div></div>
+        <div class="stat"><div class="stat-l">Done</div><div class="stat-n">{doneTasks} <span class="pct">{donePct}%</span></div></div>
+        <div class="stat"><div class="stat-l">In progress</div><div class="stat-n">{inProgressT}</div></div>
+        <div class="stat"><div class="stat-l">Remaining</div><div class="stat-n">{totalTasks - doneTasks}</div></div>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board" class:panel-open={!!selectedTask}>
+          {#each cols as col}
+            <div class="column">
+              <div class="col-header">
+                <div class="col-title">
+                  <span class="col-dot" style="background:{col==='Done'?'#639922':col==='In progress'?'#EF9F27':col==='To do'?'#378ADD':'#b4b2a9'}"></span>
+                  {col} <span class="col-count">{tasksForCol(col).length}</span>
+                </div>
+              </div>
+
+              {#each tasksForCol(col) as task}
+                <div class="task-card" class:selected={selectedTask?.id === task.id}
+                  onclick={() => selectedTask = {...task}}
+                  onkeydown={(e) => e.key==='Enter' && (selectedTask = {...task})}
+                  role="button" tabindex="0">
+                  <span class="task-tag" style={tagStyle(task.tag)}>{task.tag}</span>
+                  <div class="task-title" class:done-title={col==='Done'}>{task.title}</div>
+
+                  {#if (task.reactions||[]).length > 0}
+                    <div class="card-reactions">
+                      {#each getReactionCounts(task.reactions) as r}
+                        <span class="reaction-chip" class:reacted={hasUserReacted(task.reactions,r.emoji)}
+                          onclick={(e) => { e.stopPropagation(); toggleReaction(task.id, r.emoji); }}
+                          onkeydown={(e) => e.key==='Enter' && toggleReaction(task.id, r.emoji)}
+                          role="button" tabindex="0">
+                          {r.emoji} {r.count}
+                        </span>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <div class="task-foot">
+                    <div class="assignees">
+                      {#each (task.assignees||[]) as a}
+                        <div class="avatar-xs" style="background:{a.color};color:{a.text_color}">{a.initials}</div>
+                      {/each}
+                    </div>
+                    <div class="task-actions">
+                      {#if col !== 'Done'}
+                        <button class="icon-btn" title="Move forward"
+                          onclick={(e) => { e.stopPropagation(); const next = cols[cols.indexOf(col)+1]; if(next) moveTask(task.id, next); }}>
+                          <i class="ti ti-chevron-right" style="font-size:11px"></i>
+                        </button>
+                      {/if}
+                      <div class="rzone" style="position:relative">
+                        <button class="icon-btn rzone" onclick={(e) => { e.stopPropagation(); showReactionPicker = showReactionPicker===task.id?null:task.id; }}>✨</button>
+                        {#if showReactionPicker === task.id}
+                          <div class="reaction-picker rzone" role="dialog">
+                            <div class="picker-title">Anime Moods</div>
+                            <div class="picker-grid">
+                              {#each ANIME_REACTIONS as r}
+                                <button class="picker-btn rzone" class:active={hasUserReacted(task.reactions,r.emoji)}
+                                  onclick={() => toggleReaction(task.id, r.emoji)} title={r.label}>
+                                  <span class="picker-emoji">{r.emoji}</span>
+                                  <span class="picker-label">{r.label}</span>
+                                </button>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                      {#if task.due_date}<div class="task-due"><i class="ti ti-calendar"></i> {task.due_date}</div>{/if}
+                    </div>
+                  </div>
+                </div>
+              {/each}
+
+              <button class="add-btn" onclick={() => { newTaskStatus = col; showAddTask = true; }}>
+                <i class="ti ti-plus"></i> Add task
+              </button>
+            </div>
+          {/each}
+        </div>
+
+        {#if selectedTask}
+          <div class="detail-panel">
+            <div class="dp-header">
+              <div class="dp-title">{selectedTask.title}</div>
+              <button class="close-btn" onclick={() => selectedTask = null}>×</button>
+            </div>
+            <span class="task-tag" style={tagStyle(selectedTask.tag)}>{selectedTask.tag}</span>
+
+            <div class="dp-field">
+              <div class="dp-label">Status</div>
+              <select value={selectedTask.status} onchange={(e) => moveTask(selectedTask.id, e.target.value)}>
+                {#each cols as c}<option>{c}</option>{/each}
+              </select>
+            </div>
+            <div class="dp-field">
+              <div class="dp-label">Priority</div>
+              <span class="priority-pill"
+                style="background:{(priorityColors[selectedTask.priority]??priorityColors.Medium).bg};color:{(priorityColors[selectedTask.priority]??priorityColors.Medium).c}">
+                {selectedTask.priority ?? 'Medium'}
+              </span>
+            </div>
+
+            {#if selectedTask.checklist?.length}
+              <div class="dp-field">
+                <div class="dp-label">Checklist ({selectedTask.checklist.filter(i=>i.done).length}/{selectedTask.checklist.length})</div>
+                {#each selectedTask.checklist as item}
+                  <label class="check-item" class:item-done={item.done}>
+                    <input type="checkbox" checked={item.done}
+                      onchange={(e) => toggleChecklist(item.id, e.target.checked, selectedTask.id)} />
+                    {item.text}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+
+            <div class="dp-field">
+              <div class="dp-label">Anime Moods ✨</div>
+              <div class="detail-reactions">
+                {#each getReactionCounts(selectedTask.reactions) as r}
+                  <button class="reaction-chip" class:reacted={hasUserReacted(selectedTask.reactions,r.emoji)}
+                    onclick={() => toggleReaction(selectedTask.id, r.emoji)}>
+                    {r.emoji} {r.count}
+                  </button>
+                {/each}
+                <div class="rzone" style="position:relative;display:inline-block">
+                  <button class="add-reaction-btn rzone"
+                    onclick={(e) => { e.stopPropagation(); showReactionPicker = showReactionPicker==='detail'?null:'detail'; }}>
+                    + mood
+                  </button>
+                  {#if showReactionPicker === 'detail'}
+                    <div class="reaction-picker rzone" style="bottom:auto;top:100%;left:0;right:auto" role="dialog">
+                      <div class="picker-title">Choose a mood</div>
+                      <div class="picker-grid">
+                        {#each ANIME_REACTIONS as r}
+                          <button class="picker-btn rzone" class:active={hasUserReacted(selectedTask.reactions,r.emoji)}
+                            onclick={() => toggleReaction(selectedTask.id, r.emoji)} title={r.label}>
+                            <span class="picker-emoji">{r.emoji}</span>
+                            <span class="picker-label">{r.label}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              </div>
+            </div>
+
+            <div class="dp-field" style="margin-top:auto;padding-top:1rem;border-top:0.5px solid var(--border)">
+              <button class="btn btn-danger" style="width:100%;justify-content:center;font-size:12px"
+                onclick={() => deleteTask(selectedTask.id)}>
+                <i class="ti ti-trash"></i> Delete task
+              </button>
+            </div>
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
+</div>
+
+{#if showAddTask}
+  <div class="modal-overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && (showAddTask = false)}>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h3>New task</h3>
+        <button onclick={() => showAddTask = false} aria-label="Close">×</button>
+      </div>
+      <div class="form-group">
+        <label for="task-title">Title</label>
+        <input id="task-title" bind:value={newTaskTitle} placeholder="Task title..."
+          onkeydown={(e) => e.key === 'Enter' && addTask()} autofocus />
+      </div>
+      <div class="form-group">
+        <label for="task-status">Status</label>
+        <select id="task-status" bind:value={newTaskStatus}>
+          {#each cols as c}<option>{c}</option>{/each}
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick={() => showAddTask = false}>Cancel</button>
+        <button class="btn btn-primary" onclick={addTask}>Create task</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+.shell { display:flex; height:calc(100vh - 0px); overflow:hidden; }
+.proj-list { width:200px; flex-shrink:0; border-right:0.5px solid var(--border); padding:1rem 0; overflow-y:auto; background:var(--surface); display:flex; flex-direction:column; gap:1px; }
+.pl-label { font-size:10px; color:var(--hint); text-transform:uppercase; letter-spacing:0.08em; padding:0.75rem 1rem 0.25rem; font-weight:600; }
+.pl-empty { padding:0.75rem 1rem; display:flex; flex-direction:column; gap:8px; }
+.pl-empty p { font-size:12px; color:var(--muted); }
+.proj-item { display:flex; align-items:center; gap:8px; padding:0.45rem 1rem; font-size:13px; color:var(--muted); background:none; border:none; width:100%; text-align:left; cursor:pointer; font-family:inherit; transition:background 0.1s; }
+.proj-item:hover { background:var(--bg); color:var(--text); }
+.proj-item.active { background:var(--accent-light); color:var(--accent-text); font-weight:500; }
+.proj-item.muted { color:var(--hint); font-size:12px; }
+.proj-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.proj-count { font-size:11px; background:var(--bg); padding:1px 6px; border-radius:10px; color:var(--hint); flex-shrink:0; }
+.dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.team-member { display:flex; align-items:center; gap:8px; padding:0.35rem 1rem; font-size:12px; color:var(--muted); }
+.avatar { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; flex-shrink:0; }
+.avatar-xs { width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:600; flex-shrink:0; margin-left:-3px; border:1.5px solid var(--surface); }
+.avatar-xs:first-child { margin-left:0; }
+.board-area { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.no-proj { flex:1; display:flex; align-items:center; justify-content:center; color:var(--hint); font-size:14px; }
+.topbar { background:var(--surface); border-bottom:0.5px solid var(--border); padding:0.75rem 1.25rem; display:flex; align-items:center; justify-content:space-between; }
+.tl,.tr { display:flex; align-items:center; gap:10px; }
+.proj-title { font-size:15px; font-weight:600; color:var(--text); }
+.due-chip { font-size:12px; color:var(--muted); }
+.user-chip { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--muted); }
+.stats-bar { display:grid; grid-template-columns:repeat(4,1fr); border-bottom:0.5px solid var(--border); background:var(--surface); }
+.stat { padding:0.65rem 1.25rem; border-right:0.5px solid var(--border); display:flex; flex-direction:column; gap:2px; }
+.stat:last-child { border-right:none; }
+.stat-n { font-size:1.3rem; font-weight:600; color:var(--text); display:flex; align-items:baseline; gap:5px; }
+.stat-l { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+.pct { font-size:12px; color:var(--hint); font-weight:400; }
+.board-wrap { display:flex; flex:1; overflow:hidden; }
+.board { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; padding:1.25rem; flex:1; overflow-y:auto; align-items:start; }
+.board.panel-open { grid-template-columns:repeat(4,160px); flex:0 0 auto; }
+.column { min-width:0; }
+.col-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.col-title { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:var(--muted); }
+.col-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.col-count { background:var(--bg); font-size:11px; padding:1px 6px; border-radius:10px; color:var(--hint); }
+.task-card { width:100%; background:var(--surface); border:0.5px solid var(--border); border-radius:12px; padding:0.7rem; margin-bottom:8px; cursor:pointer; text-align:left; transition:border-color 0.15s; }
+.task-card:hover { border-color:var(--border-hover); }
+.task-card.selected { border-color:var(--accent); border-width:1px; }
+.task-tag { font-size:10px; padding:2px 7px; border-radius:4px; background:var(--bg); color:var(--muted); font-weight:500; display:inline-block; margin-bottom:5px; }
+.task-title { font-size:13px; font-weight:500; line-height:1.4; margin-bottom:6px; color:var(--text); }
+.task-title.done-title { text-decoration:line-through; color:var(--hint); }
+.task-foot { display:flex; align-items:center; justify-content:space-between; }
+.assignees { display:flex; }
+.task-actions { display:flex; align-items:center; gap:4px; }
+.task-due { font-size:11px; color:var(--hint); display:flex; align-items:center; gap:3px; }
+.icon-btn { background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; line-height:1; color:var(--muted); }
+.icon-btn:hover { background:var(--bg); color:var(--text); }
+.card-reactions { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:6px; }
+.reaction-chip { display:inline-flex; align-items:center; gap:2px; font-size:11px; padding:2px 7px; border-radius:20px; background:var(--bg); border:0.5px solid var(--border); cursor:pointer; font-family:inherit; color:var(--text); transition:all 0.12s; }
+.reaction-chip:hover { border-color:var(--accent); }
+.reaction-chip.reacted { background:var(--accent-light); border-color:var(--accent); color:var(--accent-text); font-weight:600; }
+.rzone { position:relative; }
+.reaction-picker { position:absolute; bottom:calc(100% + 8px); right:0; background:var(--surface); border:0.5px solid var(--border); border-radius:14px; padding:0.75rem; box-shadow:0 8px 30px rgba(0,0,0,0.15); z-index:300; width:230px; }
+.picker-title { font-size:10px; color:var(--hint); font-weight:500; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.06em; }
+.picker-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
+.picker-btn { display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:0.5px solid transparent; border-radius:8px; padding:4px 2px; cursor:pointer; font-family:inherit; }
+.picker-btn:hover { background:var(--bg); border-color:var(--border); }
+.picker-btn.active { background:var(--accent-light); border-color:var(--accent); }
+.picker-emoji { font-size:18px; line-height:1; }
+.picker-label { font-size:8px; color:var(--hint); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:38px; }
+.detail-reactions { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.add-reaction-btn { background:none; border:0.5px dashed var(--border-hover); border-radius:20px; padding:3px 10px; font-size:11px; color:var(--hint); cursor:pointer; font-family:inherit; }
+.add-reaction-btn:hover { border-color:var(--accent); color:var(--accent); }
+.add-btn { width:100%; background:none; border:0.5px dashed var(--border); border-radius:8px; padding:6px; font-size:12px; color:var(--hint); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px; font-family:inherit; }
+.add-btn:hover { border-color:var(--border-hover); color:var(--muted); background:var(--bg); }
+.detail-panel { width:270px; flex-shrink:0; background:var(--surface); border-left:0.5px solid var(--border); padding:1.25rem; overflow-y:auto; display:flex; flex-direction:column; }
+.dp-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; gap:8px; }
+.dp-title { font-size:14px; font-weight:500; line-height:1.4; flex:1; color:var(--text); }
+.close-btn { background:none; border:none; font-size:20px; color:var(--hint); cursor:pointer; line-height:1; }
+.close-btn:hover { color:var(--text); }
+.dp-field { margin-bottom:1rem; }
+.dp-label { font-size:10px; color:var(--hint); text-transform:uppercase; letter-spacing:0.07em; font-weight:600; margin-bottom:5px; }
+.priority-pill { display:inline-block; font-size:11px; padding:3px 10px; border-radius:20px; font-weight:500; }
+.check-item { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); padding:3px 0; cursor:pointer; }
+.check-item.item-done { text-decoration:line-through; color:var(--hint); }
+.check-item input { accent-color:var(--accent); }
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:400; }
+.modal { background:var(--surface); border:0.5px solid var(--border); border-radius:14px; padding:1.5rem; width:380px; display:flex; flex-direction:column; gap:1rem; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; }
+.modal-header h3 { font-size:15px; font-weight:600; margin:0; color:var(--text); }
+.modal-header button { background:none; border:none; font-size:20px; color:var(--hint); cursor:pointer; }
+.form-group { display:flex; flex-direction:column; gap:4px; }
+.form-group label { font-size:12px; font-weight:500; color:var(--muted); }
+.modal-actions { display:flex; justify-content:flex-end; gap:8px; }
+</style>
