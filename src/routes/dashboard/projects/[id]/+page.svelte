@@ -311,7 +311,7 @@
   function stopProp(e) { e.stopPropagation(); }
 
   function openTask(task) {
-    selectedTask = structuredClone(task);
+    selectedTask = structuredClone($state.snapshot(task));
     editingTitle = false;
     editingDesc = false;
     editTitleVal = task.title;
