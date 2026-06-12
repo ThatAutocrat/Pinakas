@@ -1,8 +1,12 @@
 <script>
   import { enhance } from '$app/forms';
   import { onMount } from 'svelte';
+  import emailjs from '@emailjs/browser';
   let { form } = $props();
   let submitting = $state(false);
+
+  let nameVal = $state('');
+  let emailVal = $state('');
 
   let activeField = $state(null);
   let bubbleTop = $state(0);
@@ -28,9 +32,7 @@
 
 <div class="page">
 
-  <!-- Subtle anime SVG background -->
   <svg class="bg-svg" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-    <!-- Stars -->
     {#each Array(30) as _, i}
       <circle
         cx={((i * 137.5) % 1200)}
@@ -40,7 +42,6 @@
         opacity={0.15 + (i % 5) * 0.05}
       />
     {/each}
-    <!-- Sparkles -->
     {#each [[120,180],[980,120],[200,620],[1050,500],[600,700],[350,80],[850,650]] as [x,y], i}
       <g transform="translate({x},{y})" class="sparkle" style="animation-delay:{i*0.4}s">
         <line x1="0" y1="-8" x2="0" y2="8" stroke="#639922" stroke-width="1.5" opacity="0.3"/>
@@ -49,17 +50,14 @@
         <line x1="5" y1="-5" x2="-5" y2="5" stroke="#639922" stroke-width="1" opacity="0.2"/>
       </g>
     {/each}
-    <!-- Soft circles -->
     <circle cx="150" cy="650" r="120" fill="#639922" opacity="0.04"/>
     <circle cx="1080" cy="150" r="100" fill="#378ADD" opacity="0.04"/>
     <circle cx="600" cy="750" r="80"  fill="#D4537E" opacity="0.03"/>
-    <!-- Floating dots -->
     {#each [[80,300],[1100,400],[300,720],[900,680],[500,60]] as [x,y], i}
       <circle cx={x} cy={y} r="4" fill="#639922" opacity="0.12" class="float-dot" style="animation-delay:{i*0.7}s"/>
     {/each}
   </svg>
 
-  <!-- Header -->
   <div class="site-header">
     <div class="brand">
       <span class="brand-name">Pinakas</span>
@@ -68,16 +66,13 @@
     <a href="/login" class="signin-link">Already have an account? Sign in →</a>
   </div>
 
-  <!-- Hero text -->
   <div class="hero-text">
     <h1 class="hero-title">Your team's<br/><span class="accent">command center.</span></h1>
     <p class="hero-sub">Tasks, boards, reactions, deadlines — all in one place.</p>
   </div>
 
-  <!-- Feature cards around the form -->
   <div class="features-layout">
 
-    <!-- Left features -->
     <div class="features-left">
       <div class="feat-card">
         <div class="feat-icon">🗂️</div>
@@ -95,10 +90,8 @@
       </div>
     </div>
 
-    <!-- Center: form + robot hand -->
     <div class="form-center">
       <div class="form-wrap">
-        <!-- Anime speech bubbles -->
         {#if activeField && bubbleMessages[activeField]}
           <div class="speech-bubble" style="top:{bubbleTop}px">
             <span class="bubble-emoji">{bubbleMessages[activeField].emoji}</span>
@@ -114,15 +107,34 @@
             <div class="error-box">{form.error}</div>
           {/if}
 
-          <form method="POST" use:enhance={() => { submitting = true; return ({ update }) => { submitting = false; update(); }; }}>
+          <form
+            method="POST"
+            use:enhance={() => {
+              submitting = true;
+              return ({ update, result }) => {
+                submitting = false;
+                if (result.type === 'redirect') {
+                  emailjs.send(
+                    'service_gx6j3mi',
+                    'template_d8m8eg9',
+                    { to_email: emailVal, name: nameVal },
+                    'KWxoGc2E_RcA4A8N-'
+                  );
+                }
+                update();
+              };
+            }}
+          >
             <div class="form-group" class:active={activeField === 'name'}>
               <label for="name">Full name</label>
               <input type="text" id="name" name="name" placeholder="Aditya Kumar" required
+                bind:value={nameVal}
                 onfocus={(e) => focusField('name', e)} onblur={blurField} />
             </div>
             <div class="form-group" class:active={activeField === 'email'}>
               <label for="email">Email</label>
               <input type="email" id="email" name="email" placeholder="you@example.com" required
+                bind:value={emailVal}
                 onfocus={(e) => focusField('email', e)} onblur={blurField} />
             </div>
             <div class="form-group" class:active={activeField === 'password'}>
@@ -141,7 +153,6 @@
       </div>
     </div>
 
-    <!-- Right features -->
     <div class="features-right">
       <div class="feat-card">
         <div class="feat-icon">🌸</div>
@@ -161,7 +172,6 @@
 
   </div>
 
-  <!-- Bottom search feature -->
   <div class="bottom-feature">
     <div class="bottom-feat-card">
       <span class="feat-icon">🔍</span>
@@ -187,7 +197,6 @@
     align-items: center;
   }
 
-  /* Background SVG */
   .bg-svg {
     position: fixed;
     inset: 0;
@@ -201,7 +210,6 @@
   .float-dot { animation: float-up 4s ease-in-out infinite; }
   @keyframes float-up { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
 
-  /* Header */
   .site-header {
     position: relative;
     z-index: 10;
@@ -218,7 +226,6 @@
   .signin-link { font-size: 13px; color: #6b6b65; text-decoration: none; }
   .signin-link:hover { color: #3B6D11; }
 
-  /* Hero */
   .hero-text {
     position: relative;
     z-index: 10;
@@ -229,7 +236,6 @@
   .accent { color: #3B6D11; }
   .hero-sub { font-size: 14px; color: #6b6b65; margin-top: 0.5rem; }
 
-  /* Features layout */
   .features-layout {
     position: relative;
     z-index: 10;
@@ -242,7 +248,6 @@
     align-items: center;
   }
 
-  /* Feature cards */
   .features-left, .features-right { display: flex; flex-direction: column; gap: 12px; }
   .feat-card {
     background: #fff;
@@ -260,11 +265,9 @@
   .feat-title { font-size: 13px; font-weight: 600; color: #1a1a18; margin-bottom: 3px; }
   .feat-desc { font-size: 12px; color: #6b6b65; line-height: 1.5; }
 
-  /* Form center */
   .form-center { display: flex; justify-content: center; }
   .form-wrap { position: relative; display: flex; align-items: flex-start; }
 
-  /* Speech bubble */
   .speech-bubble {
     position: absolute;
     left: -210px;
@@ -310,7 +313,6 @@
     100% { opacity:1; scale:1; }
   }
 
-  /* Form card */
   .form-card {
     background: #fff;
     border: 0.5px solid #e5e4df;
@@ -351,7 +353,6 @@
   .switch { text-align: center; margin-top: 1rem; font-size: 12px; color: #6b6b65; }
   .switch a { color: #3B6D11; font-weight: 500; }
 
-  /* Bottom feature */
   .bottom-feature {
     position: relative;
     z-index: 10;
