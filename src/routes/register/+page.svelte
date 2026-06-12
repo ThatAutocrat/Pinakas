@@ -116,7 +116,7 @@
                 if (result.type === 'redirect') {
                   emailjs.send(
                     'service_gx6j3mi',
-                    'template_d8m8eg9',
+                    'template_iap4rwn',
                     { to_email: emailVal, name: nameVal },
                     'KWxoGc2E_RcA4A8N-'
                   );
