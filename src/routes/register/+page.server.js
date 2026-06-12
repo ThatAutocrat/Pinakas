@@ -9,7 +9,7 @@ export function load({ locals }) {
 }
 
 export const actions = {
-  default: async ({ request, cookies, fetch }) => {
+  default: async ({ request, cookies }) => {
     const data = await request.formData();
     const name = data.get('name')?.toString().trim();
     const email = data.get('email')?.toString().trim().toLowerCase();
@@ -44,13 +44,6 @@ export const actions = {
       .select()
       .single();
     if (error) return fail(500, { error: 'Could not create account. Please try again.' });
-
-    // fire welcome email (non-blocking)
-    fetch('/api/send-welcome', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name }),
-    });
 
     const session = await lucia.createSession(user.id, {});
     const sessionCookie = lucia.createSessionCookie(session.id);
