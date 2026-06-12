@@ -9,7 +9,7 @@ export function load({ locals }) {
 }
 
 export const actions = {
-  default: async ({ request, cookies }) => {
+  default: async ({ request, cookies, fetch }) => {
     const data = await request.formData();
     const name = data.get('name')?.toString().trim();
     const email = data.get('email')?.toString().trim().toLowerCase();
@@ -25,7 +25,6 @@ export const actions = {
       .select('id')
       .eq('email', email)
       .maybeSingle();
-
     if (existing) return fail(400, { error: 'An account with this email already exists.' });
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -44,8 +43,14 @@ export const actions = {
       .insert({ name, email, password_hash: passwordHash, initials, ...pick })
       .select()
       .single();
-
     if (error) return fail(500, { error: 'Could not create account. Please try again.' });
+
+    // fire welcome email (non-blocking)
+    fetch('/api/send-welcome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name }),
+    });
 
     const session = await lucia.createSession(user.id, {});
     const sessionCookie = lucia.createSessionCookie(session.id);
