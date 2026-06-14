@@ -231,6 +231,7 @@
     z-index: 10;
     text-align: center;
     margin-bottom: 2rem;
+    padding: 0 1.5rem;
   }
   .hero-title { font-size: 2.2rem; font-weight: 800; color: #1a1a18; line-height: 1.2; letter-spacing: -0.03em; }
   .accent { color: #3B6D11; }
@@ -266,7 +267,7 @@
   .feat-desc { font-size: 12px; color: #6b6b65; line-height: 1.5; }
 
   .form-center { display: flex; justify-content: center; }
-  .form-wrap { position: relative; display: flex; align-items: flex-start; }
+  .form-wrap { position: relative; display: flex; align-items: flex-start; width: 100%; }
 
   .speech-bubble {
     position: absolute;
@@ -319,6 +320,7 @@
     border-radius: 18px;
     padding: 2rem 2rem;
     width: 340px;
+    max-width: 100%;
     box-shadow: 0 8px 40px rgba(0,0,0,0.08);
   }
   .form-title { font-size: 1rem; font-weight: 700; color: #1a1a18; margin-bottom: 1.25rem; }
@@ -357,6 +359,7 @@
     position: relative;
     z-index: 10;
     margin-top: 1.5rem;
+    padding: 0 1.5rem;
   }
   .bottom-feat-card {
     background: #fff;
@@ -371,4 +374,70 @@
   }
   .bottom-feat-card .feat-title { font-weight: 600; color: #1a1a18; }
   .bottom-feat-card .feat-desc { color: #6b6b65; }
+
+  /* ── Responsive ── */
+
+  @media (max-width: 768px) {
+    .features-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .features-left,
+    .features-right {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    .feat-card {
+      flex: 1 1 calc(50% - 6px);
+      min-width: 140px;
+    }
+
+    .speech-bubble {
+      display: none;
+    }
+
+    .form-center {
+      width: 100%;
+    }
+
+    .form-wrap {
+      justify-content: center;
+    }
+
+    .form-card {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .site-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 1.25rem 1.25rem;
+    }
+
+    .hero-title {
+      font-size: 1.7rem;
+    }
+
+    .features-layout {
+      padding: 0 1rem;
+      gap: 1rem;
+    }
+
+    .feat-card {
+      flex: 1 1 100%;
+    }
+
+    .bottom-feat-card {
+      font-size: 12px;
+      padding: 0.65rem 1rem;
+    }
+
+    .form-card {
+      padding: 1.5rem 1.25rem;
+    }
+  }
 </style>
