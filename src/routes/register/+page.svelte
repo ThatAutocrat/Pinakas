@@ -267,7 +267,7 @@
   .feat-desc { font-size: 12px; color: #6b6b65; line-height: 1.5; }
 
   .form-center { display: flex; justify-content: center; }
-  .form-wrap { position: relative; display: flex; align-items: flex-start; width: 100%; }
+  .form-wrap { position: relative; display: flex; align-items: flex-start; }
 
   .speech-bubble {
     position: absolute;
