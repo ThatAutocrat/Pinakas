@@ -13,18 +13,21 @@ jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Insert keep-alive card
+      - name: Insert keep-alive task
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          TABLE_NAME: cards   # <-- change to your actual table name
+          PROJECT_ID: ${{ secrets.KEEPALIVE_PROJECT_ID }}
         run: |
-          curl -sSf -X POST "${SUPABASE_URL}/rest/v1/${TABLE_NAME}" \
+          curl -sSf -X POST "${SUPABASE_URL}/rest/v1/tasks" \
             -H "apikey: ${SUPABASE_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_KEY}" \
             -H "Content-Type: application/json" \
             -H "Prefer: return=minimal" \
-            -d '{
-                  "title": "keep-alive ping",
-                  "status": "todo"
-                }'
+            -d "{
+                  \"title\": \"🔄 keep-alive ping\",
+                  \"status\": \"Backlog\",
+                  \"priority\": \"Low\",
+                  \"tag\": \"Feature\",
+                  \"project_id\": \"${PROJECT_ID}\"
+                }"
