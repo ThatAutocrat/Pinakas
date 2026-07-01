@@ -1,0 +1,30 @@
+name: Keep Supabase Alive
+
+# Runs every 4 days at 09:00 UTC, inserts a harmless sample card
+# into the kanban board so Supabase doesn't pause the project
+# due to inactivity (applies to free-tier projects).
+
+on:
+  schedule:
+    - cron: "0 9 */4 * *"
+  workflow_dispatch: {}   # lets you trigger it manually from the Actions tab to test
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Insert keep-alive card
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TABLE_NAME: cards   # <-- change to your actual table name
+        run: |
+          curl -sSf -X POST "${SUPABASE_URL}/rest/v1/${TABLE_NAME}" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d '{
+                  "title": "keep-alive ping",
+                  "status": "todo"
+                }'
