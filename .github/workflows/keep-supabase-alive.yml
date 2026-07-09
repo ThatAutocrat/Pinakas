@@ -1,4 +1,4 @@
-name: Keep Supabase Alive
+name: Scheduled Maintenance
 
 # Runs every 4 days at 09:00 UTC, inserts a harmless sample card
 # into the kanban board so Supabase doesn't pause the project
