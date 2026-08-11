@@ -154,8 +154,10 @@ function timeAgo(dateStr) {
 
         <div class="dp-field">
           <div class="dp-label">Created</div>
-          <div class="dp-val" title={new Date(selectedTask.created_at).toLocaleString()}>
-            {timeAgo(selectedTask.created_at)}
+          <div class="dp-val">
+            {new Date(selectedTask.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+            at {new Date(selectedTask.created_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+            <span style="color:var(--hint)">({timeAgo(selectedTask.created_at)})</span>
           </div>
         </div>
 
