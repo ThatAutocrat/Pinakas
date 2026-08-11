@@ -23,6 +23,22 @@
     return true;
   }));
 
+function timeAgo(dateStr) {
+    if (!dateStr) return '';
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const sec = Math.floor(diffMs / 1000);
+    if (sec < 60) return 'just now';
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day}d ago`;
+    const wk = Math.floor(day / 7);
+    if (wk < 5) return `${wk}w ago`;
+    return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
   const statusDot = {'Backlog':'#b4b2a9','To do':'#378ADD','In progress':'#EF9F27','Done':'#639922'};
   const priorityColors = {
     Critical:{bg:'#FCEBEB',c:'#791F1F'}, High:{bg:'#FAEEDA',c:'#633806'},
@@ -105,6 +121,9 @@
             {/if}
           </div>
           <div class="task-meta">
+            <span class="meta-chip" title={new Date(task.created_at).toLocaleString()}>
+              🕐 {timeAgo(task.created_at)}
+            </span>
             {#if task.checklist?.length}
               <span class="meta-chip">☑ {task.checklist.filter(i=>i.done).length}/{task.checklist.length}</span>
             {/if}
@@ -131,6 +150,13 @@
         <div class="dp-head">
           <span class="dp-title">{selectedTask.title}</span>
           <button class="close-btn" onclick={closeTask}>&times;</button>
+        </div>
+
+        <div class="dp-field">
+          <div class="dp-label">Created</div>
+          <div class="dp-val" title={new Date(selectedTask.created_at).toLocaleString()}>
+            {timeAgo(selectedTask.created_at)}
+          </div>
         </div>
 
         {#if selectedTask.project}
